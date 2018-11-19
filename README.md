@@ -1,2 +1,2 @@
-# Fatality-Analysis-Reporting-System-FARS-
+# Fatality Analysis Reporting System (FARS)
 SYS 6018 Final Project
