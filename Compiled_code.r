@@ -567,3 +567,24 @@ st_case = data$ST_CASE
 data$ST_CASE = NULL
 fatalities = data$FATALS
 data$FATALS = NULL
+                                 
+# t-sne visualization of the data
+library(Rtsne)
+set.seed(10)
+tsne_result = Rtsne(data)
+tsne_res = as.data.frame(tsne_result$Y)
+tsne_res$severity = severity
+save(tsne_res, file = "tsne.RData")
+
+# Plotting the t-sne output
+library(ggplot2)
+ggplot(tsne_res, aes(x = V1, y = V2, color = severity)) + geom_point() + ggtitle("First and Second tSNE dimensions colored by severity") + theme(plot.title = element_text(hjust = 0.5))
+
+pca_result = prcomp(data, rank. = 2)
+pca_res = as.data.frame(pca_result$x)
+pca_res$severity = severity
+save(pca_res, file = "pca.RData")
+ggplot(pca_res, aes(x = PC1, y = PC2, color = severity)) + geom_point() + ggtitle("First and Second PCA dimensions colored by severity") + theme(plot.title = element_text(hjust = 0.5))
+
+
+                                 
