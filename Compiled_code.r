@@ -567,7 +567,11 @@ st_case = data$ST_CASE
 data$ST_CASE = NULL
 fatalities = data$FATALS
 data$FATALS = NULL
-                                 
+ 
+#-----------------------------------------------------------------------
+# Visualizing data in 2D : t-SNE and PCA
+#-----------------------------------------------------------------------
+
 # t-sne visualization of the data
 library(Rtsne)
 set.seed(10)
@@ -588,6 +592,4 @@ save(pca_res, file = "pca.RData")
 
 # Plotting the pca output                                 
 ggplot(pca_res, aes(x = PC1, y = PC2, color = severity)) + geom_point() + ggtitle("First and Second PCA dimensions colored by severity") + theme(plot.title = element_text(hjust = 0.5))
-
-
-                                 
+                               
