@@ -18,6 +18,9 @@ library(dplyr)
 library(caret)
 library(Rtsne)
 library(ggplot2)
+library(forecast)
+library(tseries)
+library(lubridate)
 
 # Loading the data
 setwd("E:/Fall Term/SYS 6018 Applied Data Mining/Project/Data/FARS2015NationalCSV")
@@ -578,5 +581,106 @@ save(pca_res, file = "pca.RData")
 
 # Plotting the pca output    
 ggplot(pca_res, aes(x = PC1, y = PC2, color = severity)) + geom_point() + ggtitle("First and Second PCA dimensions colored by severity") + theme(plot.title = element_text(hjust = 0.5))
+
+
+#-----------------------------------------------------------------------
+# Time Series Forecasting of Total Fatal Crashes
+#-----------------------------------------------------------------------
+
+# Loading the data from year 1982-2017
+setwd('..')
+fatalcrashes = read_csv("timeseriesdata.csv")
+fatalcrashes$Year = as.Date(as.character(fatalcrashes$Year), format = "%Y")
+fatalcrashes$Year <- year(fatalcrashes$Year)
+fatalcrashes$fc_ts = ts(fatalcrashes$`Total Fatal Crashes`, start = 1982, end = 2017)
+
+# Plotting the time series
+plot.ts(fatalcrashes$fc_ts)
+
+# Checking for stationary time series using ADF Test
+# Series should be stationary for ARIMA Model
+adf.test(fatalcrashes$fc_ts, alternative = "stationary")
+
+# Augmented Dickey-Fuller Test
+# 
+# data:  fatalcrashes$fc_ts
+# Dickey-Fuller = -2.6784, Lag order = 3, p-value = 0.3092
+# alternative hypothesis: stationary
+
+# Fitting an automated ARIMA Model
+
+# Subsetting data for train
+train = fatalcrashes[1:34,]
+
+arima.fit <- auto.arima(train$fc_ts, seasonal = FALSE)
+arima.fit
+
+# Series: train$fc_ts 
+# ARIMA(1,1,0) 
+# 
+# Coefficients:
+#   ar1
+# 0.4019
+# s.e.  0.1675
+# 
+# sigma^2 estimated as 1563153:  log likelihood=-281.73
+# AIC=567.46   AICc=567.86   BIC=570.46
+
+# Evaluating model residuals and ACF/PACF plots
+tsdisplay(residuals(arima.fit))
+
+# Forecasting using the fitted model
+fcast = forecast(arima.fit, 2)
+# Plotting the forecast
+plot(fcast)
+# Testing and computing RMSE
+fvalues = as.data.frame(fcast$mean)
+names(fvalues) = "forcast"
+fvalues$actual = fatalcrashes$`Total Fatal Crashes`[35:36]
+sqrt(mean((fvalues$actual - fvalues$forcast)^2))
+#[1] 885.0426
+
+# Fitting the model for the whole data
+arima.fit <- auto.arima(fatalcrashes$fc_ts, seasonal = FALSE)
+arima.fit
+
+# Series: fatalcrashes$fc_ts 
+# ARIMA(1,1,0) 
+# 
+# Coefficients:
+#   ar1
+# 0.4009
+# s.e.  0.1531
+# 
+# sigma^2 estimated as 1571244:  log likelihood=-298.92
+# AIC=601.84   AICc=602.22   BIC=604.95
+
+# Evaluating model residuals and ACF/PACF plots
+tsdisplay(residuals(arima.fit))
+
+# Forecasting using the fitted model
+fcast = forecast(arima.fit, 1)
+# Plotting the forecast
+plot(fcast)
+fcast
+#       Point Forecast    Lo 80    Hi 80    Lo 95    Hi 95
+# 2018        34046.16 32439.74 35652.57 31589.35 36502.96
+
+# The total fatal crashes will decrease to 34046 for the year 2018 according to the prediction made by the ARIMA model
+
+
+#-----------------------------------------------------------------------
+# Accident severity Classification
+#-----------------------------------------------------------------------
+
+# RANDOM FOREST MODEL
+
+
+
+# KNN MODEL
+
+
+
+# SVM MODEL
 
 
