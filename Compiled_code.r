@@ -580,10 +580,13 @@ save(tsne_res, file = "tsne.RData")
 library(ggplot2)
 ggplot(tsne_res, aes(x = V1, y = V2, color = severity)) + geom_point() + ggtitle("First and Second tSNE dimensions colored by severity") + theme(plot.title = element_text(hjust = 0.5))
 
+# pca visualization of the data                                 
 pca_result = prcomp(data, rank. = 2)
 pca_res = as.data.frame(pca_result$x)
 pca_res$severity = severity
 save(pca_res, file = "pca.RData")
+
+# Plotting the pca output                                 
 ggplot(pca_res, aes(x = PC1, y = PC2, color = severity)) + geom_point() + ggtitle("First and Second PCA dimensions colored by severity") + theme(plot.title = element_text(hjust = 0.5))
 
 
