@@ -568,6 +568,15 @@ data$ST_CASE = NULL
 fatalities = data$FATALS
 data$FATALS = NULL
  
+# Creating an identifier with final values
+
+Identifier <- as.data.frame(year)
+Identifier['st_case'] <- st_case
+Identifier$accident_id = paste(Identifier$year, Identifier$st_case, sep="_")
+Identifier$fatalities = fatalities
+Identifier$year = NULL
+Identifier$st_case = NULL
+                                 
 #-----------------------------------------------------------------------
 # Visualizing data in 2D : t-SNE and PCA
 #-----------------------------------------------------------------------
