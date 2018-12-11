@@ -10,37 +10,56 @@
 #-----------------------------------------------------------------------
 
 # Setting the working directory to source file location
-setwd("C:/Users/Elena/Desktop/MSDS/MSDS Courses/Fall 18/SYS6018/Final Project")
+setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/")
 
-#-----------------------------------------------------------------------
-# Load and merge the data
-#-----------------------------------------------------------------------
+install.packages("h2o")
+install.packages('pROC')
+install.packages("parallelSVM")
 
 # Importing the required packages
 library(readr)
 library(caret)
+library(dplyr)
+library (e1071)
+library (ROCR)
+library(tree)
+library (randomForest)
+library(MASS)
+library(caTools)                
+library(h2o)
+library(ggplot2)
+library(parallelSVM)
+
+#-----------------------------
+# Load and merge the data
+#-----------------------------
 
 # Loading the data
-acc15 = read_csv('./Data/FARS2015NationalCSV/acc_aux.csv')
-veh15 = read_csv('./Data/FARS2015NationalCSV/veh_aux.csv')
-per15 = read_csv('./Data/FARS2015NationalCSV/per_aux.csv')
-acc16 = read_csv('./Data/FARS2016NationalCSV/acc_aux.csv')
-veh16 = read_csv('./Data/FARS2016NationalCSV/veh_aux.csv')
-per16 = read_csv('./Data/FARS2016NationalCSV/per_aux.csv')
-acc17 = read_csv('./Data/FARS2017NationalCSV/acc_aux.csv')
-veh17 = read_csv('./Data/FARS2017NationalCSV/veh_aux.csv')
-per17 = read_csv('./Data/FARS2017NationalCSV/per_aux.csv')
+setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/FARS2015NationalCSV")
+files15 = list.files(pattern=".*csv")
+acc15 = read_csv(files15[1])
+per15 = read_csv(files15[17])
+veh15 = read_csv(files15[20])
 
-# combining datasets for each year
+setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/FARS2016NationalCSV")
+files16 = list.files(pattern=".*csv")
+acc16 = read_csv(files16[1])
+per16 = read_csv(files16[17])
+veh16 = read_csv(files16[20])
+
+setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/FARS2017NationalCSV")
+files17 = list.files(pattern=".*csv")
+acc17 = read_csv(files17[1])
+per17 = read_csv(files17[17])
+veh17 = read_csv(files17[20])
+
 accident = rbind(acc15, acc16, acc17)
 vehicle = rbind(veh15, veh16, veh17)
 person = rbind(per15, per16, per17)
 
-
-
-#-----------------------------------------------------------------------
+#-----------------------------
 # EXPLORATORY DATA ANALYSIS
-#-----------------------------------------------------------------------
+#-----------------------------
 
 #------------------
 # ACCIDENT DATASET
@@ -104,7 +123,6 @@ sum(accident$FATALS[accident$A_TOD==1]) #53093
 # fatalities for night crashes
 sum(accident$FATALS[accident$A_TOD==2]) #56523
 # more accidents and more fatalities during night-time
-
 
 # rural vs. urban
 table(accident$A_RU)
@@ -264,6 +282,8 @@ acc_cause
 # VEHICLE DATASET
 #------------------
 
+hist(accident$FATALS)
+
 # Distribution of vehicle types in accidents
 
 hist(vehicle$A_BODY, xlab = "Vehicle Body", main = "Vehicle Type in Accident", axis(side=1, at=seq(0,9,1), labels=seq(0,9,1)))
@@ -379,9 +399,9 @@ legend('topright', c("-1 - Not Applicable/Not Available", "1 - Non Hispance", "2
 
 # Statistically insignificant information about Hispanic origin
 
-#-----------------------------------------------------------------------
+#----------------------
 # SUMMARISING ACCIDENT DATASET
-#-----------------------------------------------------------------------
+#----------------------
 
 # Getting the number of distinct/unique values in each of the columns in the train dataset
 feat_uniq_values <- as.data.frame(sapply(accident, n_distinct))
@@ -421,9 +441,9 @@ accident[fact_cols] <- lapply(accident[fact_cols], factor)
 dmy <- dummyVars(" ~ .", data = accident, sep = "_", fullRank = T)
 accident_new <- data.frame(predict(dmy, newdata = accident))
 
-#-----------------------------------------------------------------------
+#----------------------
 # SUMMARISING VEHICLE DATASET
-#-----------------------------------------------------------------------
+#----------------------
 
 # Converting categorical variables to factor
 
@@ -486,16 +506,19 @@ hist(plotx , xlab = "No of vehicles", main = "No of vehicles in Accident", xlim 
      axis(side=1, at=seq(0,10,1), labels=seq(0,10,1)))
 
 
-#-----------------------------------------------------------------------
+#----------------------
 # SUMMARISING PERSON DATASET
-#-----------------------------------------------------------------------
+#----------------------
 
 # keeping only AGE3 for age
 person = person[, -c(1,2,4,5,6,7,8,9)]
 
+person$VEH_NO <- NULL
+person$PER_NO = NULL
+
 # all variables apart form YEAR and ST_CASE need to be factors
 # make a list of categorical variables
-person_variables = colnames(person[,-c(2,5)])
+person_variables = colnames(person[,-c(2,3)])
 
 # change categorical variables to factors
 person[person_variables] = lapply(person[person_variables], factor) 
@@ -507,6 +530,8 @@ sapply(person, class)
 # "factor"  "integer"  "factor"  "factor"  "integer"  "factor"  "factor"  "factor" 
 # A_ALCTES    A_HISP    A_RCAT   A_HRACE   A_EJECT  A_PERINJ     A_LOC 
 # "factor"  "factor"  "factor"  "factor"  "factor"  "factor"  "factor" 
+
+
 
 # One-hot encoding for factor variables
 dmy <- dummyVars(" ~ .", data = person, sep = "_", fullRank = T)
@@ -530,9 +555,9 @@ plotx = person_new[person_new$NO_OF_PERSONS < 20,"NO_OF_PERSONS"]
 hist(plotx, xlab = "No of persons", main = "No of persons in Accident", xlim = c(0,20 ),
      axis(side=1, at=seq(0,20,1), labels=seq(0,20,1)))
 
-#-----------------------------------------------------------------------
+#----------------------
 # MERGING ACCIDENT, PERSON, AND VEHICLE DATASET
-#-----------------------------------------------------------------------
+#----------------------
 
 data = merge(x = accident_new, y = person_new, by=c('YEAR','ST_CASE'), all.x = TRUE)
 data = merge(x = data, y = vehicle_unique, by=c('YEAR','ST_CASE'), all.x = TRUE)
@@ -567,8 +592,8 @@ st_case = data$ST_CASE
 data$ST_CASE = NULL
 fatalities = data$FATALS
 data$FATALS = NULL
-                                 
- # Creating an identifier with final values
+
+# Creating an identifier with final values
 
 Identifier <- as.data.frame(year)
 Identifier['st_case'] <- st_case
@@ -576,10 +601,10 @@ Identifier$accident_id = paste(Identifier$year, Identifier$st_case, sep="_")
 Identifier$severity = severity
 Identifier$year = NULL
 Identifier$st_case = NULL
-                                 
-#-----------------------------------------------------------------------
+
+#----------------------
 # Visualizing data in 2D : t-SNE and PCA
-#-----------------------------------------------------------------------
+#----------------------
 
 # t-sne visualization of the data
 library(Rtsne)
@@ -601,4 +626,448 @@ save(pca_res, file = "pca.RData")
 
 # Plotting the pca output                                 
 ggplot(pca_res, aes(x = PC1, y = PC2, color = severity)) + geom_point() + ggtitle("First and Second PCA dimensions colored by severity") + theme(plot.title = element_text(hjust = 0.5))
-                               
+
+
+#-----------------------------------------------------------------------
+# Accident severity Classification
+#-----------------------------------------------------------------------
+
+data$severity <- severity
+
+setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/")
+
+write_csv(data, "final_data.csv")
+
+data <- read_csv("final_data.csv")
+
+data$severity <- as.factor(data$severity)
+
+#--------------------------
+# VARIABLE SELECTION using RF
+#--------------------------
+
+# Removing county and region
+data <- data [, -c(51:365)]
+
+# DECIDING WHAT VARIABLES TO KEEP USING RANDOM FOREST by h2o
+y.col <- 'severity'
+x.cols <- setdiff(colnames(data), y.col)
+
+# We split train set for CV
+set.seed(1)
+
+sample = sample.split(data$severity, SplitRatio = .5)
+sub_train = subset(data, sample == TRUE)
+sub_test  = subset(data, sample == FALSE)
+
+h2o.init(nthreads=-1,max_mem_size='10G')
+sub_train = as.h2o(sub_train)
+sub_test = as.h2o(sub_test)
+RF_model = h2o.randomForest(x=x.cols,
+                            y=y.col,
+                            ntrees = 50,
+                            mtries = -1,
+                            max_depth=50,
+                            nfolds = 10,
+                            training_frame=sub_train,
+                            validation_frame=sub_test,
+                            seed=1)
+
+# RF_model will give you summary of RF model with Cross validation information on test(originally derived from train set)
+variable_rf <-  as.data.frame (h2o.varimp (RF_model))
+
+imp_variables <- variable_rf[variable_rf$scaled_importance > 0.002,"variable"]
+
+imp_variables
+
+# [1] "A_HISP_1"      "A_RCAT_1"      "A_HRACE_2"     "A_HRACE_1"     "A_RCAT_2"      "A_HISP_2"      "A_HISP_3"      "A_HRACE_3"    
+# [9] "A_RCAT_8"      "A_HRACE_9"     "A_PTYPE_2"     "A_PERINJ_6"    "A_HRACE_8"     "A_HELMUSE_2"   "A_ALCTES_2"    "A_RESTUSE_2"  
+# [17] "A_RCAT_7"      "A_RCAT_3"      "A_HRACE_4"     "A_EJECT_2"     "A_HRACE_5"     "A_RCAT_4"      "A_AGE3_7"      "A_MANCOL_3"   
+# [25] "A_ALCTES_5"    "A_ALCTES_3"    "A_IMP1_2"      "A_AGE3_5"      "A_AGE3_6"      "A_HELMUSE_3"   "A_PTYPE_3"     "A_DRDIS_2"    
+# [33] "A_RESTUSE_3"   "A_AGE3_8"      "A_MC_L_S_4"    "A_CDL_S_2"     "A_POSBAC_3"    "A_AGE3_9"      "A_SBUS_3"      "A_AGE3_10"    
+# [41] "A_RU_2"        "A_BODY_3"      "NO_OF_PERSONS" "A_SPVEH_2"     "A_LOC_3"       "A_ROLL_2"      "A_VROLL_2"     "A_BODY_2"     
+# [49] "A_TOD_2"       "A_SPCRA_2"     "A_LIC_S_2"     "A_AGE3_2"      "A_DOW_2"       "A_JUNC_2"      "A_POSBAC_2"    "A_RD_2"       
+# [57] "A_LIC_C_2"     "A_ROADFC_3"    "A_PED_F_2"    
+
+imp_variables <- c("A_HISP_1","A_RCAT_1","A_HRACE_2","A_HRACE_1","A_RCAT_2","A_HISP_2","A_HISP_3","A_HRACE_3",
+                   "A_RCAT_8","A_HRACE_9","A_PTYPE_2","A_PERINJ_6","A_HRACE_8","A_HELMUSE_2","A_ALCTES_2","A_RESTUSE_2",
+                   "A_RCAT_7","A_RCAT_3","A_HRACE_4","A_EJECT_2","A_HRACE_5","A_RCAT_4","A_AGE3_7","A_MANCOL_3",
+                   "A_ALCTES_5","A_ALCTES_3","A_IMP1_2","A_AGE3_5","A_AGE3_6","A_HELMUSE_3","A_PTYPE_3","A_DRDIS_2",
+                   "A_RESTUSE_3","A_AGE3_8","A_MC_L_S_4","A_CDL_S_2","A_POSBAC_3","A_AGE3_9","A_SBUS_3","A_AGE3_10",
+                   "A_RU_2","A_BODY_3","NO_OF_PERSONS","A_SPVEH_2","A_LOC_3","A_ROLL_2","A_VROLL_2","A_BODY_2",
+                   "A_TOD_2","A_SPCRA_2","A_LIC_S_2","A_AGE3_2","A_DOW_2","A_JUNC_2","A_POSBAC_2","A_RD_2",
+                   "A_LIC_C_2","A_ROADFC_3","A_PED_F_2")
+
+
+#---------------------------------------
+# SUPPORT VECTOR MACHINES
+#---------------------------------------
+#--------------------------
+# SVM - linear kernel
+#--------------------------
+
+# subsetting data for SVM
+sub_train_sv <- data[,c(imp_variables, "severity")]
+
+pkgs <- c('foreach', 'doParallel')
+lapply(pkgs, require, character.only = T)
+registerDoParallel(cores = 4)
+
+
+set.seed(2016)
+sub_train_sv$fold <- caret::createFolds(1:nrow(sub_train_sv), k = 4, list = FALSE)
+
+### PARAMETER LIST ###
+cost <- c(0.001, 0.01, 0.1, 1, 5, 10, 100)
+gamma <- c(0.5,1,2,3,4)
+parms <- expand.grid(cost = cost, gamma = gamma)
+
+### LOOP THROUGH PARAMETER VALUES ###
+result <- foreach(i = 1:nrow(parms), .combine = rbind) %do% {
+  c <- parms[i, ]$cost
+  
+  ### K-FOLD VALIDATION ###
+  
+  out <- foreach(j = 1:max(sub_train_sv$fold), .combine = rbind, .inorder = FALSE) %dopar% {
+    deve <- sub_train_sv[sub_train_sv$fold != j, ]
+    test <- sub_train_sv[sub_train_sv$fold == j, ]
+    mdl <- e1071::svm(severity~., data = deve, type = "C-classification", kernel = "linear", cost = c, probability = TRUE)
+    pred <- predict(mdl, test, decision.values = TRUE, probability = TRUE)
+    data.frame(y = test$severity, prob = attributes(pred)$probabilities[, 2])
+  }
+  
+  ### CALCULATE SVM PERFORMANCE ###
+  roc <- pROC::roc(as.factor(out$y), out$prob)
+  data.frame(parms[i, ], roc = roc$auc[1])
+}
+
+
+dat <- data.frame("cost" = as.factor(result$cost),
+                  "gamma" = as.factor(result$gamma),
+                  "AUC" = result$roc)
+
+# plotting heat map for different cost and gamma values AUC
+ggplot(dat, aes(cost, gamma))  + geom_tile(aes(fill=AUC), colour = "white")  + scale_fill_gradient(low = "white",  high = "steelblue") + geom_text(label = round((dat$AUC),2))
+
+#--------------------------
+# SVM - radial kernel
+#--------------------------
+
+# We split train set for CV
+set.seed(1)
+
+# splitting data into test and train set
+
+sample = sample.split(data$severity, SplitRatio = .8)
+
+sub_train = subset(data, sample == TRUE)
+sub_test  = subset(data, sample == FALSE)
+
+# keeping only important variables decided by RF
+sub_train <- sub_train[,c(imp_variables, "severity")]
+sub_test <- sub_test[,c(imp_variables, "severity")]
+
+# Running parallel SVM on default cost and gamma
+parallelSvm1 <- parallelSVM(severity ~ ., data = sub_train, kernel = 'radial',
+                            numberCores = 8, 
+                            probability = TRUE,
+                            decision.values =T)
+
+fitted.svm1 = predict (parallelSvm1, sub_train, decision.values = TRUE)
+predict.svm1 = predict (parallelSvm1, sub_test, decision.values = TRUE)
+
+# plotting roc curve for test vs train
+
+#---------------------------------------
+# KNN MODEL
+#---------------------------------------
+
+data_new = data[,c(imp_variables, "severity")]
+
+# Partitioning the data into training and validation data
+set.seed(100)
+index = createDataPartition(data_new$severity, p = 0.7, list = F)
+train = data_new[index,]
+validation = data_new[-index,]
+
+# Setting up train controls
+repeats = 3
+numbers = 10
+tunel = 10
+
+# create a cluster running on 8 cores
+cluster = makeCluster(8)
+registerDoParallel(cluster)
+
+set.seed(1234)
+x = trainControl(method = "repeatedcv", number = numbers, repeats = repeats, classProbs = TRUE, summaryFunction = multiClassSummary)
+
+knn.model <- train(severity ~. , data = train, method = "knn",
+                   trControl = x,
+                   metric = "ROC",
+                   tuneLength = tunel)
+
+# tear down cluster
+stopCluster(cluster)
+
+# Summary of model
+knn.model
+
+# k-Nearest Neighbors 
+# 
+# 71075 samples
+# 59 predictor
+# 3 classes: 'high', 'low', 'medium' 
+# 
+# No pre-processing
+# Resampling: Cross-Validated (10 fold, repeated 3 times) 
+# Summary of sample sizes: 63967, 63968, 63968, 63967, 63967, 63967, ... 
+# Resampling results across tuning parameters:
+#   
+#   k   logLoss    AUC        prAUC      Accuracy   Kappa      Mean_F1    Mean_Sensitivity  Mean_Specificity
+# 5  0.5383000  0.8976070  0.4511327  0.9539782  0.5306489  0.6419451  0.5531600         0.8117928       
+# 7  0.4473077  0.9177019  0.4755909  0.9508406  0.4843720  0.6113800  0.5263062         0.7973954       
+# 9  0.3845460  0.9314439  0.4933009  0.9486223  0.4504280  0.5844005  0.5044249         0.7874983       
+# 11  0.3453900  0.9401302  0.5025080  0.9468824  0.4222073  0.5646908  0.4887714         0.7791644       
+# 13  0.3155998  0.9472012  0.5104747  0.9455692  0.4001474  0.5515098  0.4783824         0.7727622       
+# 15  0.2919252  0.9523602  0.5159083  0.9445468  0.3825072  0.5405725  0.4700362         0.7677526       
+# 17  0.2776536  0.9555951  0.5194434  0.9433650  0.3622211  0.5256483  0.4590605         0.7623180       
+# 19  0.2671895  0.9581169  0.5225075  0.9424082  0.3451361  0.5148029  0.4511794         0.7577202       
+# 21  0.2541708  0.9608345  0.5250564  0.9415406  0.3290456  0.5042306  0.4437145         0.7533594       
+# 23  0.2430859  0.9635627  0.5275932  0.9407808  0.3150601  0.4946660  0.4370647         0.7497533       
+# Mean_Pos_Pred_Value  Mean_Neg_Pred_Value  Mean_Precision  Mean_Recall  Mean_Detection_Rate  Mean_Balanced_Accuracy
+# 0.9054637            0.9834196            0.9054637       0.5531600    0.3179927            0.6824764             
+# 0.8943097            0.9827212            0.8943097       0.5263062    0.3169469            0.6618508             
+# 0.8845130            0.9821234            0.8845130       0.5044249    0.3162074            0.6459616             
+# 0.8784441            0.9817879            0.8784441       0.4887714    0.3156275            0.6339679             
+# 0.8734434            0.9815371            0.8734434       0.4783824    0.3151897            0.6255723             
+# 0.8684397            0.9812053            0.8684397       0.4700362    0.3148489            0.6188944             
+# 0.8616371            0.9808205            0.8616371       0.4590605    0.3144550            0.6106892             
+# 0.8557513            0.9805107            0.8557513       0.4511794    0.3141361            0.6044498             
+# 0.8505619            0.9802308            0.8505619       0.4437145    0.3138469            0.5985369             
+# 0.8450545            0.9799851            0.8450545       0.4370647    0.3135936            0.5934090             
+# 
+# logLoss was used to select the optimal model using the smallest value.
+# The final value used for the model was k = 23.
+
+# Using logLoss to choose the optimal model instead of accuracy because of severe class imbalances
+
+plot(knn.model)
+
+# Validation
+valid_pred = predict(knn.model, validation)
+
+# Model Performance Scores
+confusionMatrix(valid_pred, validation$severity)
+
+# Confusion Matrix and Statistics
+# 
+# Reference
+# Prediction  high   low medium
+# high      57     0      0
+# low      106 28308   1489
+# medium   211     0    287
+# 
+# Overall Statistics
+# 
+# Accuracy : 0.9407         
+# 95% CI : (0.938, 0.9433)
+# No Information Rate : 0.9294         
+# P-Value [Acc > NIR] : 1.583e-15      
+# 
+# Kappa : 0.3149         
+# Mcnemar's Test P-Value : < 2.2e-16      
+
+#Classification Accuracy for KNN: 94.07%
+
+#---------------------------------------
+# RANDOM FOREST MODEL
+#---------------------------------------
+
+set.seed(123)
+sub = sample(1:nrow(data), nrow(data)/2)
+sub_train = data[sub,]
+sub_test = data[-sub,]
+
+y.col <- 'severity'
+x.cols <- setdiff(colnames(data), y.col)
+
+h2o.init(nthreads=-1,max_mem_size='10G')
+sub_train = as.h2o(sub_train)
+sub_test = as.h2o(sub_test)
+RF_model = h2o.randomForest(x=x.cols,
+                            y=y.col,
+                            ntrees = 50,
+                            mtries = -1,
+                            max_depth=100,
+                            nfolds = 10,
+                            training_frame=sub_train,
+                            validation_frame=sub_test,
+                            seed=1)
+
+
+# create a dataframe with variable importance
+var = as.data.frame(h2o.varimp(RF_model))
+
+# create an array of variable names important for classifying severity
+imp_var = var[var$scaled_importance > 0.001,]$variable #108 variables
+
+# make a dataframe with variables identified as important
+imp_data = data[,imp_var]
+
+# save the data to csv
+write.csv(imp_data, file='rf_imp_data.csv')
+
+# add severity column to the data
+imp_data$severity = data$severity
+
+# rerun random forest on selected (important) variables
+set.seed(432)
+sub = sample(1:nrow(imp_data), nrow(imp_data)/2)
+sub_train = imp_data[sub,]
+sub_test = imp_data[-sub,]
+
+y.col <- 'severity'
+x.cols <- setdiff(colnames(imp_data), y.col)
+
+h2o.init(nthreads=-1,max_mem_size='10G')
+sub_train = as.h2o(sub_train)
+sub_test = as.h2o(sub_test)
+RF_model = h2o.randomForest(x=x.cols,
+                            y=y.col,
+                            ntrees = 50,
+                            mtries = -1,
+                            max_depth=100,
+                            nfolds = 10,
+                            training_frame=sub_train,
+                            validation_frame=sub_test,
+                            seed=1)
+
+# classification accuracy
+cm.rf = as.matrix(h2o.confusionMatrix(RF_model)[1:3,1:3])
+cm.rf
+
+#        high   low medium
+# high    548     0     36
+# low       0 47230      0
+# medium    0    61   2891
+
+# classification accuracy for random forest
+sum(diag(cm.rf))/sum(cm.rf)
+# 99.81% classification accuracy
+
+
+# BOOSTING
+
+set.seed(12)
+sub = sample(1:nrow(data), nrow(data)/2)
+sub_train = data[sub,]
+sub_test = data[-sub,]
+
+# fit the boosted model
+boost.data = gbm(severity~., data=sub_train, distribution="multinomial", n.trees=50, interaction.depth=4)
+
+# use the boosted model for prediction
+yhat.boost = predict(boost.data, newdata=sub_test, n.trees=50)
+
+# find classification with max prediction value
+p.yhat.boost = colnames(yhat.boost)[apply(yhat.boost, 1, which.max)]
+
+# create confusion matrix to test accuracy
+cm.boost = as.matrix(table(Actual = sub_test$severity, Predicted = p.yhat.boost))
+cm.boost
+
+#         Predicted
+# Actual  high   low medium
+# high     554     0     47
+# low        0 47186      0
+# medium     0    44   2936
+
+# classification accuracy for boosting
+sum(diag(cm.boost))/sum(cm.boost)
+# 99.82% classification accuracy
+
+#-----------------------------------------------------------------------
+# Time Series Forecasting of Total Fatal Crashes
+#-----------------------------------------------------------------------
+
+# Loading the data from year 1982-2017
+setwd('..')
+fatalcrashes = read_csv("timeseriesdata.csv")
+fatalcrashes$Year = as.Date(as.character(fatalcrashes$Year), format = "%Y")
+fatalcrashes$Year <- year(fatalcrashes$Year)
+fatalcrashes$fc_ts = ts(fatalcrashes$`Total Fatal Crashes`, start = 1982, end = 2017)
+
+# Plotting the time series
+plot.ts(fatalcrashes$fc_ts)
+
+# Checking for stationary time series using ADF Test
+# Series should be stationary for ARIMA Model
+adf.test(fatalcrashes$fc_ts, alternative = "stationary")
+
+# Augmented Dickey-Fuller Test
+# 
+# data:  fatalcrashes$fc_ts
+# Dickey-Fuller = -2.6784, Lag order = 3, p-value = 0.3092
+# alternative hypothesis: stationary
+
+# Fitting an automated ARIMA Model
+
+# Subsetting data for train
+train = fatalcrashes[1:34,]
+
+arima.fit <- auto.arima(train$fc_ts, seasonal = FALSE)
+arima.fit
+
+# Series: train$fc_ts 
+# ARIMA(1,1,0) 
+# 
+# Coefficients:
+#   ar1
+# 0.4019
+# s.e.  0.1675
+# 
+# sigma^2 estimated as 1563153:  log likelihood=-281.73
+# AIC=567.46   AICc=567.86   BIC=570.46
+
+# Evaluating model residuals and ACF/PACF plots
+tsdisplay(residuals(arima.fit))
+
+# Forecasting using the fitted model
+fcast = forecast(arima.fit, 2)
+# Plotting the forecast
+plot(fcast)
+# Testing and computing RMSE
+fvalues = as.data.frame(fcast$mean)
+names(fvalues) = "forcast"
+fvalues$actual = fatalcrashes$`Total Fatal Crashes`[35:36]
+sqrt(mean((fvalues$actual - fvalues$forcast)^2))
+#[1] 885.0426
+
+# Fitting the model for the whole data
+arima.fit <- auto.arima(fatalcrashes$fc_ts, seasonal = FALSE)
+arima.fit
+
+# Series: fatalcrashes$fc_ts 
+# ARIMA(1,1,0) 
+# 
+# Coefficients:
+#   ar1
+# 0.4009
+# s.e.  0.1531
+# 
+# sigma^2 estimated as 1571244:  log likelihood=-298.92
+# AIC=601.84   AICc=602.22   BIC=604.95
+
+# Evaluating model residuals and ACF/PACF plots
+tsdisplay(residuals(arima.fit))
+
+# Forecasting using the fitted model
+fcast = forecast(arima.fit, 1)
+# Plotting the forecast
+plot(fcast)
+fcast
+#       Point Forecast    Lo 80    Hi 80    Lo 95    Hi 95
+# 2018        34046.16 32439.74 35652.57 31589.35 36502.96
+
+# The total fatal crashes will decrease to 34046 for the year 2018 according to the prediction made by the ARIMA model
