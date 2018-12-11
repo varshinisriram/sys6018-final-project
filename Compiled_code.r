@@ -47,20 +47,20 @@ library(gbm)
 setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/FARS2015NationalCSV")
 files15 = list.files(pattern=".*csv")
 acc15 = read_csv(files15[1])
-per15 = read_csv(files15[17])
-veh15 = read_csv(files15[20])
+per15 = read_csv(files15[2])
+veh15 = read_csv(files15[3])
 
 setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/FARS2016NationalCSV")
 files16 = list.files(pattern=".*csv")
 acc16 = read_csv(files16[1])
-per16 = read_csv(files16[17])
-veh16 = read_csv(files16[20])
+per16 = read_csv(files16[2])
+veh16 = read_csv(files16[3])
 
 setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/FARS2017NationalCSV")
 files17 = list.files(pattern=".*csv")
 acc17 = read_csv(files17[1])
-per17 = read_csv(files17[17])
-veh17 = read_csv(files17[20])
+per17 = read_csv(files17[2])
+veh17 = read_csv(files17[3])
 
 accident = rbind(acc15, acc16, acc17)
 vehicle = rbind(veh15, veh16, veh17)
@@ -1251,7 +1251,3 @@ fcast
 # 2018        34046.16 32439.74 35652.57 31589.35 36502.96
 
 # The total fatal crashes will decrease to 34046 for the year 2018 according to the prediction made by the ARIMA model
- 
-#-----------------------------------------------------------------------
-#-----------------------------------------------------------------------
-                                 
