@@ -21,6 +21,8 @@ library(ggplot2)
 library(forecast)
 library(tseries)
 library(lubridate)
+library(doParallel)
+library(MLmetrics)
 
 # Loading the data
 setwd("E:/Fall Term/SYS 6018 Applied Data Mining/Project/Data/FARS2015NationalCSV")
@@ -403,6 +405,10 @@ fact_cols = colnames(accident)
 fact_cols = fact_cols[-c(1, 3, 5)]
 accident[fact_cols] <- lapply(accident[fact_cols], factor)
 
+# Removing State and County columns since we have region
+accident$STATE = NULL
+accident$COUNTY = NULL
+
 # One Hot Encoding of the factor variables
 dmy <- dummyVars(" ~ .", data = accident, sep = "_", fullRank = T)
 accident_new <- data.frame(predict(dmy, newdata = accident))
@@ -678,6 +684,116 @@ fcast
 
 
 # KNN MODEL
+
+# Adding the response variable back to the data
+data$severity = severity
+data$severity = as.factor(data$severity)
+
+# Important variables from RANDOM FOREST RESULTS
+imp_variables <- c("A_HISP_1","A_RCAT_1","A_HRACE_2","A_HRACE_1","A_RCAT_2","A_HISP_2","A_HISP_3","A_HRACE_3",
+                   "A_RCAT_8","A_HRACE_9","A_PTYPE_2","A_PERINJ_6","A_HRACE_8","A_HELMUSE_2","A_ALCTES_2","A_RESTUSE_2",
+                   "A_RCAT_7","A_RCAT_3","A_HRACE_4","A_EJECT_2","A_HRACE_5","A_RCAT_4","A_AGE3_7","A_MANCOL_3",
+                   "A_ALCTES_5","A_ALCTES_3","A_IMP1_2","A_AGE3_5","A_AGE3_6","A_HELMUSE_3","A_PTYPE_3","A_DRDIS_2",
+                   "A_RESTUSE_3","A_AGE3_8","A_MC_L_S_4","A_CDL_S_2","A_POSBAC_3","A_AGE3_9","A_SBUS_3","A_AGE3_10",
+                   "A_RU_2","A_BODY_3","NO_OF_PERSONS","A_SPVEH_2","A_LOC_3","A_ROLL_2","A_VROLL_2","A_BODY_2",
+                   "A_TOD_2","A_SPCRA_2","A_LIC_S_2","A_AGE3_2","A_DOW_2","A_JUNC_2","A_POSBAC_2","A_RD_2",
+                   "A_LIC_C_2","A_ROADFC_3","A_PED_F_2", "severity")
+
+data_new = data[,imp_variables]
+
+# Partitioning the data into training and validation data
+set.seed(100)
+index = createDataPartition(data_new$severity, p = 0.7, list = F)
+train = data_new[index,]
+validation = data_new[-index,]
+
+# Setting up train controls
+repeats = 3
+numbers = 10
+tunel = 10
+
+# create a cluster running on 8 cores
+cluster = makeCluster(8)
+registerDoParallel(cluster)
+
+set.seed(1234)
+x = trainControl(method = "repeatedcv", number = numbers, repeats = repeats, classProbs = TRUE, summaryFunction = multiClassSummary)
+
+knn.model <- train(severity ~. , data = train, method = "knn",
+                trControl = x,
+                metric = "ROC",
+                tuneLength = tunel)
+
+# tear down cluster
+stopCluster(cluster)
+
+# Summary of model
+knn.model
+
+# k-Nearest Neighbors 
+# 
+# 71075 samples
+# 59 predictor
+# 3 classes: 'high', 'low', 'medium' 
+# 
+# No pre-processing
+# Resampling: Cross-Validated (10 fold, repeated 3 times) 
+# Summary of sample sizes: 63967, 63968, 63968, 63967, 63967, 63967, ... 
+# Resampling results across tuning parameters:
+#   
+#   k   logLoss    AUC        prAUC      Accuracy   Kappa      Mean_F1    Mean_Sensitivity  Mean_Specificity
+# 5  0.5383000  0.8976070  0.4511327  0.9539782  0.5306489  0.6419451  0.5531600         0.8117928       
+# 7  0.4473077  0.9177019  0.4755909  0.9508406  0.4843720  0.6113800  0.5263062         0.7973954       
+# 9  0.3845460  0.9314439  0.4933009  0.9486223  0.4504280  0.5844005  0.5044249         0.7874983       
+# 11  0.3453900  0.9401302  0.5025080  0.9468824  0.4222073  0.5646908  0.4887714         0.7791644       
+# 13  0.3155998  0.9472012  0.5104747  0.9455692  0.4001474  0.5515098  0.4783824         0.7727622       
+# 15  0.2919252  0.9523602  0.5159083  0.9445468  0.3825072  0.5405725  0.4700362         0.7677526       
+# 17  0.2776536  0.9555951  0.5194434  0.9433650  0.3622211  0.5256483  0.4590605         0.7623180       
+# 19  0.2671895  0.9581169  0.5225075  0.9424082  0.3451361  0.5148029  0.4511794         0.7577202       
+# 21  0.2541708  0.9608345  0.5250564  0.9415406  0.3290456  0.5042306  0.4437145         0.7533594       
+# 23  0.2430859  0.9635627  0.5275932  0.9407808  0.3150601  0.4946660  0.4370647         0.7497533       
+# Mean_Pos_Pred_Value  Mean_Neg_Pred_Value  Mean_Precision  Mean_Recall  Mean_Detection_Rate  Mean_Balanced_Accuracy
+# 0.9054637            0.9834196            0.9054637       0.5531600    0.3179927            0.6824764             
+# 0.8943097            0.9827212            0.8943097       0.5263062    0.3169469            0.6618508             
+# 0.8845130            0.9821234            0.8845130       0.5044249    0.3162074            0.6459616             
+# 0.8784441            0.9817879            0.8784441       0.4887714    0.3156275            0.6339679             
+# 0.8734434            0.9815371            0.8734434       0.4783824    0.3151897            0.6255723             
+# 0.8684397            0.9812053            0.8684397       0.4700362    0.3148489            0.6188944             
+# 0.8616371            0.9808205            0.8616371       0.4590605    0.3144550            0.6106892             
+# 0.8557513            0.9805107            0.8557513       0.4511794    0.3141361            0.6044498             
+# 0.8505619            0.9802308            0.8505619       0.4437145    0.3138469            0.5985369             
+# 0.8450545            0.9799851            0.8450545       0.4370647    0.3135936            0.5934090             
+# 
+# logLoss was used to select the optimal model using the smallest value.
+# The final value used for the model was k = 23.
+
+# Using logLoss to choose the optimal model instead of accuracy because of severe class imbalances
+
+plot(knn.model)
+
+# Validation
+valid_pred = predict(knn.model, validation)
+
+# Model Performance Scores
+confusionMatrix(valid_pred, validation$severity)
+
+# Confusion Matrix and Statistics
+# 
+# Reference
+# Prediction  high   low medium
+# high      57     0      0
+# low      106 28308   1489
+# medium   211     0    287
+# 
+# Overall Statistics
+# 
+# Accuracy : 0.9407         
+# 95% CI : (0.938, 0.9433)
+# No Information Rate : 0.9294         
+# P-Value [Acc > NIR] : 1.583e-15      
+# 
+# Kappa : 0.3149         
+# Mcnemar's Test P-Value : < 2.2e-16      
 
 
 
