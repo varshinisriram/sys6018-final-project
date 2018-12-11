@@ -13,8 +13,10 @@
 setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/")
 
 install.packages("h2o")
-install.packages('pROC')
-install.packages("parallelSVM")
+#install.packages('pROC')
+#install.packages("parallelSVM")
+#install.packages("Rtsne")
+#install.packages("MLmetrics")
 
 # Importing the required packages
 library(readr)
@@ -29,6 +31,13 @@ library(caTools)
 library(h2o)
 library(ggplot2)
 library(parallelSVM)
+library(Rtsne)
+library(forecast)
+library(tseries)
+library(lubridate)
+library(doParallel)
+library(MLmetrics)
+library(gbm)
 
 #-----------------------------
 # Load and merge the data
@@ -73,7 +82,7 @@ dim(vehicle)
 # 154837     16
 
 dim(person)
-# 253015     15
+# 253015     23
 
 # vehicle and person data has more rows
 
@@ -277,6 +286,61 @@ acc_cause
 # most fatalities happen on roadways, in speeding crashes,
 # on junctions and intersections, and involve driving under intoxication
 
+# sort dataframe by number of fatalities
+acc_cause = as.data.frame(acc_cause[order(acc_cause$Fatalities, decreasing = T),])
+
+acc_cause$Accidents = as.numeric(acc_cause$Accidents)
+acc_cause$Fatalities = as.numeric(acc_cause$Fatalities)
+
+# print the dataframe
+acc_cause
+
+#        Accidents Fatalities
+# rd         52354      57698
+# spcra      26712      29731
+# roll       24064      26897
+# intsec     24909      26796
+# junc       24909      26796
+# posbac     22839      25423
+# ped        17461      17813
+# mc         15311      15795
+# inter      12709      14282
+# lt         11756      13225
+# dist        9374      10182
+# hr          5699       5879
+# pedal       2472       2499
+# drowsy      2190       2459
+# polpur      1033       1204
+
+# most fatalities happen on roadways, in speeding crashes,
+# on junctions and intersections, and involve driving under intoxication
+
+# add ratio for fatalities per accident in each category
+acc_cause$Ratio = acc_cause$Fatalities/acc_cause$Accidents
+
+# sort dataframe by number of fatalities
+acc_cause = as.data.frame(acc_cause[order(acc_cause$Ratio, decreasing = T),])
+acc_cause
+
+#        Accidents Fatalities    Ratio
+# polpur      1033       1204 1.165537
+# lt         11756      13225 1.124957
+# inter      12709      14282 1.123771
+# drowsy      2190       2459 1.122831
+# roll       24064      26897 1.117728
+# posbac     22839      25423 1.113140
+# spcra      26712      29731 1.113020
+# rd         52354      57698 1.102074
+# dist        9374      10182 1.086196
+# intsec     24909      26796 1.075756
+# junc       24909      26796 1.075756
+# mc         15311      15795 1.031611
+# hr          5699       5879 1.031584
+# ped        17461      17813 1.020159
+# pedal       2472       2499 1.010922
+
+# accidents involving police persuit, large trucks, interstate collision 
+# and drowsy drivers had the most fatalities per accident
 
 #------------------
 # VEHICLE DATASET
@@ -593,15 +657,6 @@ data$ST_CASE = NULL
 fatalities = data$FATALS
 data$FATALS = NULL
 
-# Creating an identifier with final values
-
-Identifier <- as.data.frame(year)
-Identifier['st_case'] <- st_case
-Identifier$accident_id = paste(Identifier$year, Identifier$st_case, sep="_")
-Identifier$severity = severity
-Identifier$year = NULL
-Identifier$st_case = NULL
-
 #----------------------
 # Visualizing data in 2D : t-SNE and PCA
 #----------------------
@@ -634,7 +689,7 @@ ggplot(pca_res, aes(x = PC1, y = PC2, color = severity)) + geom_point() + ggtitl
 
 data$severity <- severity
 
-setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/")
+#setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/")
 
 write_csv(data, "final_data.csv")
 
@@ -776,7 +831,85 @@ parallelSvm1 <- parallelSVM(severity ~ ., data = sub_train, kernel = 'radial',
 fitted.svm1 = predict (parallelSvm1, sub_train, decision.values = TRUE)
 predict.svm1 = predict (parallelSvm1, sub_test, decision.values = TRUE)
 
+# FOR THE TRAINING SET
+confusionMatrix(sub_train$severity, fitted.svm1)
+
+# Confusion Matrix and Statistics
+# 
+# Reference
+#         high   low medium
+# high     746    96    156
+# low        0 75490      0
+# medium     1   203   4534
+# 
+# Overall Statistics
+# 
+# Accuracy : 0.9944          
+# 95% CI : (0.9938, 0.9949)
+# No Information Rate : 0.9331          
+# P-Value [Acc > NIR] : < 2.2e-16       
+# 
+# Kappa : 0.9566          
+# Mcnemar's Test P-Value : < 2.2e-16       
+# 
+# Statistics by Class:
+# 
+# Class: high Class: low Class: medium
+# Sensitivity             0.998661     0.9961       0.96674
+# Specificity             0.996869     1.0000       0.99733
+# Pos Pred Value          0.747495     1.0000       0.95694
+# Neg Pred Value          0.999988     0.9479       0.99796
+# Prevalence              0.009197     0.9331       0.05774
+# Detection Rate          0.009184     0.9294       0.05582
+# Detection Prevalence    0.012287     0.9294       0.05833
+# Balanced Accuracy       0.997765     0.9980       0.98204
 # plotting roc curve for test vs train
+
+# FOR THE TESTING SET
+confusionMatrix(sub_test$severity, predict.svm1)
+
+Severity_level_actual <- factor(c("high", "high", "high", "low", "low", "low", "medium", "medium", "medium"))
+Severity_Level_predicted <- factor(c("high", "low", "medium", "high", "low", "medium", "high", "low", "medium"))
+
+Y <- c(171, 22, 57, 0, 18873, 0, 0, 45, 1139)
+
+df <- data.frame(Severity_level_actual, Severity_Level_predicted, Y)
+
+ggplot(data =  df, mapping = aes(x = Severity_level_actual, y = Severity_Level_predicted)) +
+  geom_tile(aes(fill = Y), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y)), vjust = 1) +
+  scale_fill_gradient(low = "lightblue", high = "steelblue") +
+  theme_bw() + theme(legend.position = "none")
+
+# Confusion Matrix and Statistics
+# 
+# Reference
+# Prediction  high   low medium
+# high     171    22     57
+# low        0 18873      0
+# medium     0    45   1139
+# 
+# Overall Statistics
+# 
+# Accuracy : 0.9939          
+# 95% CI : (0.9927, 0.9949)
+# No Information Rate : 0.9327          
+# P-Value [Acc > NIR] : < 2.2e-16       
+# 
+# Kappa : 0.9529          
+# Mcnemar's Test P-Value : < 2.2e-16       
+# 
+# Statistics by Class:
+# 
+# Class: high Class: low Class: medium
+# Sensitivity             1.000000     0.9965       0.95234
+# Specificity             0.996077     1.0000       0.99765
+# Pos Pred Value          0.684000     1.0000       0.96199
+# Neg Pred Value          1.000000     0.9533       0.99702
+# Prevalence              0.008421     0.9327       0.05890
+# Detection Rate          0.008421     0.9294       0.05609
+# Detection Prevalence    0.012311     0.9294       0.05831
+# Balanced Accuracy       0.998038     0.9982       0.97499
 
 #---------------------------------------
 # KNN MODEL
@@ -860,6 +993,19 @@ valid_pred = predict(knn.model, validation)
 # Model Performance Scores
 confusionMatrix(valid_pred, validation$severity)
 
+Severity_level_actual <- factor(c("high", "high", "high", "low", "low", "low", "medium", "medium", "medium"))
+Severity_Level_predicted <- factor(c("high", "low", "medium", "high", "low", "medium", "high", "low", "medium"))
+
+Y <- c(57, 106, 211, 0, 28308, 0, 0, 1489, 287)
+
+df <- data.frame(Severity_level_actual, Severity_Level_predicted, Y)
+
+ggplot(data =  df, mapping = aes(x = Severity_level_actual, y = Severity_Level_predicted)) +
+  geom_tile(aes(fill = Y), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y)), vjust = 1) +
+  scale_fill_gradient(low = "lightblue", high = "steelblue") +
+  theme_bw() + theme(legend.position = "none")
+
 # Confusion Matrix and Statistics
 # 
 # Reference
@@ -883,6 +1029,14 @@ confusionMatrix(valid_pred, validation$severity)
 #---------------------------------------
 # RANDOM FOREST MODEL
 #---------------------------------------
+
+#setwd("C:/Users/Kanika/Downloads/FARS - DM Project/FARS DATA/Data/")
+data <- read_csv("final_data.csv")
+
+data$severity <- as.factor(data$severity)
+
+# Removing county and region
+data <- data [, -c(51:365)]
 
 set.seed(123)
 sub = sample(1:nrow(data), nrow(data)/2)
@@ -952,6 +1106,19 @@ cm.rf
 # low       0 47230      0
 # medium    0    61   2891
 
+Severity_level_actual <- factor(c("high", "high", "high", "low", "low", "low", "medium", "medium", "medium"))
+Severity_Level_predicted <- factor(c("high", "low", "medium", "high", "low", "medium", "high", "low", "medium"))
+
+Y <- c(548, 0, 0, 0, 47230, 61, 36, 0, 2891)
+
+df <- data.frame(Severity_level_actual, Severity_Level_predicted, Y)
+
+ggplot(data =  df, mapping = aes(x = Severity_level_actual, y = Severity_Level_predicted)) +
+  geom_tile(aes(fill = Y), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y)), vjust = 1) +
+  scale_fill_gradient(low = "lightblue", high = "steelblue") +
+  theme_bw() + theme(legend.position = "none")
+
 # classification accuracy for random forest
 sum(diag(cm.rf))/sum(cm.rf)
 # 99.81% classification accuracy
@@ -982,6 +1149,19 @@ cm.boost
 # high     554     0     47
 # low        0 47186      0
 # medium     0    44   2936
+
+Severity_level_actual <- factor(c("high", "high", "high", "low", "low", "low", "medium", "medium", "medium"))
+Severity_Level_predicted <- factor(c("high", "low", "medium", "high", "low", "medium", "high", "low", "medium"))
+
+Y <- c(554, 0, 0, 0, 47186, 44, 47, 0, 2936)
+
+df <- data.frame(Severity_level_actual, Severity_Level_predicted, Y)
+
+ggplot(data =  df, mapping = aes(x = Severity_level_actual, y = Severity_Level_predicted)) +
+  geom_tile(aes(fill = Y), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y)), vjust = 1) +
+  scale_fill_gradient(low = "lightblue", high = "steelblue") +
+  theme_bw() + theme(legend.position = "none")
 
 # classification accuracy for boosting
 sum(diag(cm.boost))/sum(cm.boost)
@@ -1071,3 +1251,7 @@ fcast
 # 2018        34046.16 32439.74 35652.57 31589.35 36502.96
 
 # The total fatal crashes will decrease to 34046 for the year 2018 according to the prediction made by the ARIMA model
+ 
+#-----------------------------------------------------------------------
+#-----------------------------------------------------------------------
+                                 
