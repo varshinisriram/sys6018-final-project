@@ -23,6 +23,9 @@ library(tseries)
 library(lubridate)
 library(doParallel)
 library(MLmetrics)
+library(h2o)
+library(gbm)
+
 
 # Loading the data
 setwd("E:/Fall Term/SYS 6018 Applied Data Mining/Project/Data/FARS2015NationalCSV")
@@ -679,15 +682,118 @@ fcast
 # Accident severity Classification
 #-----------------------------------------------------------------------
 
-# RANDOM FOREST MODEL
-
-
-
-# KNN MODEL
-
 # Adding the response variable back to the data
 data$severity = severity
 data$severity = as.factor(data$severity)
+
+
+# RANDOM FOREST MODEL
+
+set.seed(123)
+sub = sample(1:nrow(data), nrow(data)/2)
+sub_train = data[sub,]
+sub_test = data[-sub,]
+
+y.col <- 'severity'
+x.cols <- setdiff(colnames(data), y.col)
+
+h2o.init(nthreads=-1,max_mem_size='10G')
+sub_train = as.h2o(sub_train)
+sub_test = as.h2o(sub_test)
+RF_model = h2o.randomForest(x=x.cols,
+                            y=y.col,
+                            ntrees = 50,
+                            mtries = -1,
+                            max_depth=100,
+                            nfolds = 10,
+                            training_frame=sub_train,
+                            validation_frame=sub_test,
+                            seed=1)
+
+
+# create a dataframe with variable importance
+var = as.data.frame(h2o.varimp(RF_model))
+
+# create an array of variable names important for classifying severity
+imp_var = var[var$scaled_importance > 0.001,]$variable #108 variables
+
+# make a dataframe with variables identified as important
+imp_data = data[,imp_var]
+
+# save the data to csv
+write.csv(imp_data, file='rf_imp_data.csv')
+
+# add severity column to the data
+imp_data$severity = data$severity
+
+# rerun random forest on selected (important) variables
+set.seed(432)
+sub = sample(1:nrow(imp_data), nrow(imp_data)/2)
+sub_train = imp_data[sub,]
+sub_test = imp_data[-sub,]
+
+y.col <- 'severity'
+x.cols <- setdiff(colnames(imp_data), y.col)
+
+h2o.init(nthreads=-1,max_mem_size='10G')
+sub_train = as.h2o(sub_train)
+sub_test = as.h2o(sub_test)
+RF_model = h2o.randomForest(x=x.cols,
+                            y=y.col,
+                            ntrees = 50,
+                            mtries = -1,
+                            max_depth=100,
+                            nfolds = 10,
+                            training_frame=sub_train,
+                            validation_frame=sub_test,
+                            seed=1)
+
+# classification accuracy
+cm.rf = as.matrix(h2o.confusionMatrix(RF_model)[1:3,1:3])
+cm.rf
+
+#        high   low medium
+# high    548     0     36
+# low       0 47230      0
+# medium    0    61   2891
+
+# classification accuracy for random forest
+sum(diag(cm.rf))/sum(cm.rf)
+# 99.81% classification accuracy
+
+
+# BOOSTING
+
+set.seed(12)
+sub = sample(1:nrow(data), nrow(data)/2)
+sub_train = data[sub,]
+sub_test = data[-sub,]
+
+# fit the boosted model
+boost.data = gbm(severity~., data=sub_train, distribution="multinomial", n.trees=50, interaction.depth=4)
+
+# use the boosted model for prediction
+yhat.boost = predict(boost.data, newdata=sub_test, n.trees=50)
+
+# find classification with max prediction value
+p.yhat.boost = colnames(yhat.boost)[apply(yhat.boost, 1, which.max)]
+
+# create confusion matrix to test accuracy
+cm.boost = as.matrix(table(Actual = sub_test$severity, Predicted = p.yhat.boost))
+cm.boost
+
+#         Predicted
+# Actual  high   low medium
+# high     554     0     47
+# low        0 47186      0
+# medium     0    44   2936
+
+# classification accuracy for boosting
+sum(diag(cm.boost))/sum(cm.boost)
+# 99.82% classification accuracy
+
+
+# KNN MODEL
 
 # Important variables from RANDOM FOREST RESULTS
 imp_variables <- c("A_HISP_1","A_RCAT_1","A_HRACE_2","A_HRACE_1","A_RCAT_2","A_HISP_2","A_HISP_3","A_HRACE_3",
@@ -795,6 +901,7 @@ confusionMatrix(valid_pred, validation$severity)
 # Kappa : 0.3149         
 # Mcnemar's Test P-Value : < 2.2e-16      
 
+#Classification Accuracy for KNN: 94.07%
 
 
 # SVM MODEL
